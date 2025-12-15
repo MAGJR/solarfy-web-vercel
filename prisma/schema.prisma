@@ -1,0 +1,849 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                         String                     @id @default(cuid())
+  email                      String                     @unique
+  name                       String?
+  emailVerified              Boolean                    @default(false)
+  image                      String?
+  role                       UserRole                   @default(VIEWER)
+  tenantId                   String?
+  status                     UserStatus                 @default(ACTIVE)
+  permissions                String[]                   @default([])
+  lastLogin                  DateTime?
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
+  accounts                   Account[]
+  createdCrmLeads            CrmLead[]                  @relation("CrmLeadCreator")
+  customers                  Customer[]
+  installations              Installation[]
+  invitations                Invitation[]
+  notifications              Notification[]
+  uploadedProjectImages      ProjectImage[]             @relation("ProjectImageUploader")
+  uploadedRequestAttachments ProjectRequestAttachment[] @relation("ProjectRequestAttachmentUploader")
+  projectRequestComments     ProjectRequestComment[]    @relation("ProjectRequestCommenter")
+  assignedProjectRequests    ProjectRequest[]           @relation("ProjectRequestAssignee")
+  createdProjectRequests     ProjectRequest[]           @relation("ProjectRequestCreator")
+  projects                   Project[]
+  proposals                  Proposal[]
+  createdServices            Service[]                  @relation("ServiceCreator")
+  sessions                   Session[]
+  stripeCustomer             StripeCustomer?
+  stripeSubscriptions        StripeSubscription[]
+  assignedTickets            SupportTicket[]            @relation("TicketAssignee")
+  createdTickets             SupportTicket[]            @relation("TicketCreator")
+  ownedTenants               Tenant[]                   @relation("TenantOwner")
+  ticketResponses            TicketResponse[]
+  tenant                     Tenant?                    @relation("TenantUsers", fields: [tenantId], references: [id])
+
+  @@map("users")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@map("accounts")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([identifier, value])
+  @@map("verifications")
+}
+
+model Customer {
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  phone         String?
+  ssn           String?
+  ein           String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  createdBy     String
+  creator       User           @relation(fields: [createdBy], references: [id])
+  installations Installation[]
+  projects      Project[]
+  proposals     Proposal[]
+
+  @@map("customers")
+}
+
+model Equipment {
+  id                String             @id @default(cuid())
+  name              String
+  type              EquipmentType
+  brand             String
+  model             String
+  power             Float
+  price             Float
+  description       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  projectEquipments ProjectEquipment[]
+
+  @@map("equipment")
+}
+
+model Project {
+  id               String                 @id @default(cuid())
+  name             String
+  description      String?
+  status           ProjectStatus          @default(PLANNING)
+  estimatedKw      Float
+  estimatedPrice   Float
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  customerId       String?
+  createdById      String
+  crmLeadId        String?
+  address          String?
+  email            String?
+  phone            String?
+  latitude         Float?
+  longitude        Float?
+  enphaseSystemId  String?                @unique
+  enphaseStatus    EnphaseStatus          @default(PENDING)
+  enphaseLastSync  DateTime?
+  enphaseApiKey    String?
+  enphaseEnabled   Boolean                @default(false)
+  enphaseJwtToken  String?
+  enphaseExpiresAt DateTime?
+  monitoringData   EnphaseMonitoringData?
+  installations    Installation[]
+  equipments       ProjectEquipment[]
+  images           ProjectImage[]
+  projectRequests  ProjectRequest[]       @relation("ProjectRequestConversion")
+  createdBy        User                   @relation(fields: [createdById], references: [id])
+  crmLead          CrmLead?               @relation("ProjectCrmLead", fields: [crmLeadId], references: [id])
+  customer         Customer?              @relation(fields: [customerId], references: [id])
+  proposals        Proposal[]
+
+  @@map("projects")
+}
+
+model ProjectEquipment {
+  id          String    @id @default(cuid())
+  projectId   String
+  equipmentId String
+  quantity    Int
+  createdAt   DateTime  @default(now())
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, equipmentId])
+  @@map("project_equipment")
+}
+
+model Proposal {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  totalKw     Float
+  totalPrice  Float
+  status      ProposalStatus @default(DRAFT)
+  validUntil  DateTime
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  projectId   String
+  customerId  String
+  createdById String
+  createdBy   User           @relation(fields: [createdById], references: [id])
+  customer    Customer       @relation(fields: [customerId], references: [id])
+  project     Project        @relation(fields: [projectId], references: [id])
+
+  @@map("proposals")
+}
+
+model Installation {
+  id               String               @id @default(cuid())
+  name             String
+  address          String
+  installationDate DateTime
+  completionDate   DateTime?
+  status           InstallationStatus   @default(SCHEDULED)
+  totalKw          Float
+  observations     String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  projectId        String
+  customerId       String
+  createdById      String
+  metrics          InstallationMetric[]
+  createdBy        User                 @relation(fields: [createdById], references: [id])
+  customer         Customer             @relation(fields: [customerId], references: [id])
+  project          Project              @relation(fields: [projectId], references: [id])
+
+  @@map("installations")
+}
+
+model InstallationMetric {
+  id             String       @id @default(cuid())
+  installationId String
+  energyProduced Float
+  energySaved    Float
+  co2Reduced     Float
+  timestamp      DateTime     @default(now())
+  installation   Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+
+  @@map("installation_metrics")
+}
+
+model Email {
+  id           String    @id @default(cuid())
+  to           String
+  subject      String
+  htmlContent  String
+  textContent  String?
+  type         String
+  status       String    @default("pending")
+  templateId   String?
+  templateData Json?
+  from         Json?
+  replyTo      String?
+  attachments  Json?
+  sentAt       DateTime?
+  deliveredAt  DateTime?
+  errorMessage String?
+  externalId   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("emails")
+}
+
+model StripeCustomer {
+  id       String @id @default(cuid())
+  userId   String @unique
+  stripeId String @unique
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("stripe_customers")
+}
+
+model StripeSubscription {
+  id                 String   @id @default(cuid())
+  userId             String
+  stripeId           String   @unique
+  stripePriceId      String
+  status             String
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("stripe_subscriptions")
+}
+
+model Tenant {
+  id              String           @id @default(cuid())
+  name            String
+  domain          String?          @unique
+  settings        Json?
+  ownerId         String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  company         Company?
+  enphaseConfig   EnphaseConfig?
+  invitations     Invitation[]
+  projectRequests ProjectRequest[] @relation("TenantProjectRequests")
+  services        Service[]        @relation("TenantServices")
+  owner           User             @relation("TenantOwner", fields: [ownerId], references: [id])
+  users           User[]           @relation("TenantUsers")
+
+  @@map("tenants")
+}
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  email       String
+  phone       String?
+  address     String?
+  website     String?
+  taxId       String?
+  description String?
+  tenantId    String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("companies")
+}
+
+model Invitation {
+  id        String           @id @default(cuid())
+  email     String
+  role      UserRole
+  token     String           @unique
+  message   String?
+  status    InvitationStatus @default(PENDING)
+  invitedBy String
+  tenantId  String
+  expiresAt DateTime
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  inviter   User             @relation(fields: [invitedBy], references: [id])
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([email, tenantId, status])
+  @@map("invitations")
+}
+
+model SupportTicket {
+  id           String           @id @default(cuid())
+  subject      String
+  description  String
+  status       TicketStatus     @default(OPEN)
+  priority     TicketPriority   @default(MEDIUM)
+  category     TicketCategory   @default(TECHNICAL)
+  tenantId     String
+  createdById  String
+  assignedToId String?
+  resolvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  assignedTo   User?            @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  createdBy    User             @relation("TicketCreator", fields: [createdById], references: [id])
+  responses    TicketResponse[]
+
+  @@map("support_tickets")
+}
+
+model TicketResponse {
+  id         String        @id @default(cuid())
+  content    String
+  isInternal Boolean       @default(false)
+  ticketId   String
+  userId     String
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id])
+
+  @@map("ticket_responses")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  userId    String
+  isRead    Boolean  @default(false)
+  data      Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+model ProjectRequest {
+  id                   String                     @id @default(cuid())
+  serviceType          ServiceType
+  status               ProjectRequestStatus       @default(PENDING)
+  priority             ProjectRequestPriority     @default(NORMAL)
+  clientName           String
+  clientEmail          String
+  clientPhone          String
+  companyName          String?
+  address              String
+  address2             String?
+  city                 String
+  state                String
+  zipCode              String
+  country              String                     @default("Brasil")
+  latitude             Float?
+  longitude            Float?
+  title                String
+  description          String
+  estimatedBudget      Float?
+  preferredTimeline    String?
+  propertyType         PropertyType
+  roofType             String?
+  estimatedSize        Float?
+  assignedToId         String?
+  assignedAt           DateTime?
+  reviewedBy           String?
+  reviewedAt           DateTime?
+  rejectionReason      String?
+  adminNotes           String?
+  convertedToProjectId String?
+  convertedAt          DateTime?
+  serviceId            String
+  createdById          String
+  tenantId             String
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  attachments          ProjectRequestAttachment[]
+  comments             ProjectRequestComment[]
+  assignedTo           User?                      @relation("ProjectRequestAssignee", fields: [assignedToId], references: [id])
+  convertedToProject   Project?                   @relation("ProjectRequestConversion", fields: [convertedToProjectId], references: [id])
+  createdBy            User                       @relation("ProjectRequestCreator", fields: [createdById], references: [id])
+  service              Service                    @relation(fields: [serviceId], references: [id])
+  tenant               Tenant                     @relation("TenantProjectRequests", fields: [tenantId], references: [id])
+
+  @@map("project_requests")
+}
+
+model ProjectRequestAttachment {
+  id               String         @id @default(cuid())
+  filename         String
+  url              String
+  type             String
+  size             Int
+  projectRequestId String
+  uploadedBy       String
+  createdAt        DateTime       @default(now())
+  projectRequest   ProjectRequest @relation(fields: [projectRequestId], references: [id], onDelete: Cascade)
+  uploader         User           @relation("ProjectRequestAttachmentUploader", fields: [uploadedBy], references: [id])
+
+  @@map("project_request_attachments")
+}
+
+model ProjectRequestComment {
+  id               String         @id @default(cuid())
+  content          String
+  projectRequestId String
+  userId           String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  projectRequest   ProjectRequest @relation(fields: [projectRequestId], references: [id], onDelete: Cascade)
+  user             User           @relation("ProjectRequestCommenter", fields: [userId], references: [id])
+
+  @@map("project_request_comments")
+}
+
+model Service {
+  id                    String           @id @default(cuid())
+  title                 String
+  description           String
+  category              ServiceCategory
+  status                ServiceStatus    @default(ACTIVE)
+  basePrice             Float?
+  priceMin              Float?
+  priceMax              Float?
+  pricingDescription    String?
+  estimatedDuration     String?
+  includesWarranty      Boolean          @default(false)
+  warrantyDescription   String?
+  requiredFields        Json
+  propertyTypes         String[]
+  estimatedSizeRequired Boolean          @default(false)
+  imageUrl              String?
+  gallery               Json?
+  features              Json?
+  benefits              Json?
+  isAvailable           Boolean          @default(true)
+  requiresSiteVisit     Boolean          @default(false)
+  tenantId              String
+  createdById           String
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  projectRequests       ProjectRequest[]
+  createdBy             User             @relation("ServiceCreator", fields: [createdById], references: [id])
+  tenant                Tenant           @relation("TenantServices", fields: [tenantId], references: [id])
+
+  @@map("services")
+}
+
+model CrmLead {
+  id             String             @id @default(cuid())
+  name           String
+  email          String
+  phone          String?
+  company        String
+  status         CrmUserStatus      @default(LEAD)
+  score          Int                @default(50)
+  assignee       String?
+  productService ProductService
+  notes          String?
+  customerType   LeadCustomerType   @default(UNKNOWN)
+  lastActivity   DateTime           @default(now())
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  createdBy      String
+  creator        User               @relation("CrmLeadCreator", fields: [createdBy], references: [id])
+  monitoringData MonitoringData[]
+  projects       Project[]          @relation("ProjectCrmLead")
+  journey        UserJourneyStep[]
+
+  @@map("crm_leads")
+}
+
+model UserJourneyStep {
+  id          String          @id @default(cuid())
+  crmLeadId   String
+  step        JourneyStepType
+  status      StepStatus      @default(PENDING)
+  completedAt DateTime?
+  notes       String?
+  assignedTo  String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  crmLead     CrmLead         @relation(fields: [crmLeadId], references: [id], onDelete: Cascade)
+
+  @@map("user_journey_steps")
+}
+
+model MonitoringData {
+  id                  String          @id @default(cuid())
+  crmLeadId           String
+  customerType        CustomerType    @default(RESIDENTIAL)
+  address             String
+  peakKwp             Float
+  energyTodayKwh      Float           @default(0)
+  equipmentStatus     EquipmentStatus @default(ONLINE)
+  alertLevel          AlertLevel      @default(NORMAL)
+  microinverterBrand  String?
+  microinverterModel  String?
+  microinverterCount  Int?
+  microinverterSerial String?
+  enphaseSystemId     String?
+  enphaseUserId       String?
+  enphaseSiteId       String?
+  enphaseApiKey       String?
+  enphaseApiEnabled   Boolean         @default(false)
+  currentPowerW       Float?
+  lifetimeEnergyKwh   Float?
+  lastSyncAt          DateTime?
+  lastUpdate          DateTime        @default(now())
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  crmLead             CrmLead         @relation(fields: [crmLeadId], references: [id], onDelete: Cascade)
+
+  @@map("monitoring_data")
+}
+
+model EnphaseMonitoringData {
+  id                String    @id @default(cuid())
+  projectId         String    @unique
+  systemStatus      String
+  currentPowerW     Float?
+  energyTodayKwh    Float?
+  energyLifetimeKwh Float?
+  lastUpdateTime    DateTime
+  production7Days   Json?
+  production30Days  Json?
+  activeAlerts      Json?
+  lastAlertCheck    DateTime?
+  cacheValidUntil   DateTime
+  lastSyncAt        DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("enphase_monitoring_data")
+}
+
+model EnphaseConfig {
+  id               String            @id @default(cuid())
+  tenantId         String            @unique
+  status           EnphaseAuthStatus @default(NOT_AUTHORIZED)
+  accessToken      String?
+  refreshToken     String?
+  tokenExpiresAt   DateTime?
+  environment      String            @default("production")
+  apiKey           String?
+  apiSecret        String?
+  availableSystems String[]          @default([])
+  authorizedAt     DateTime?
+  lastRefreshAt    DateTime?
+  lastSyncAt       DateTime          @default(now())
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("enphase_configs")
+}
+
+model ProjectImage {
+  id           String   @id @default(cuid())
+  filename     String
+  originalName String
+  url          String
+  type         String
+  size         Int
+  category     String?
+  description  String?
+  order        Int      @default(0)
+  projectId    String
+  uploadedBy   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploader     User     @relation("ProjectImageUploader", fields: [uploadedBy], references: [id])
+
+  @@map("project_images")
+}
+
+model GeocodingCache {
+  id               Int      @id @default(autoincrement())
+  address          String   @unique
+  latitude         Float
+  longitude        Float
+  displayName      String?  @map("display_name")
+  formattedAddress String?  @map("formatted_address")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("geocoding_cache")
+}
+
+enum EquipmentType {
+  SOLAR_PANEL
+  INVERTER
+  BATTERY
+  STRUCTURE
+  CABLE
+  OTHER
+}
+
+enum ProjectStatus {
+  PLANNING
+  PROPOSAL_SENT
+  APPROVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum EnphaseStatus {
+  PENDING
+  ACTIVE
+  ERROR
+  DISABLED
+  SYNCING
+}
+
+enum EnphaseAuthStatus {
+  NOT_AUTHORIZED
+  AUTHORIZED
+  EXPIRED
+  REVOKED
+  ERROR
+}
+
+enum ProposalStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum InstallationStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  MAINTENANCE
+  INACTIVE
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  SALES_REP
+  TECHNICIAN
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+  SUSPENDED
+}
+
+enum ProjectRequestStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CONVERTED_TO_PROJECT
+}
+
+enum ProjectRequestPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ServiceType {
+  RESIDENTIAL_INSTALLATION
+  COMMERCIAL_INSTALLATION
+  MAINTENANCE
+  REPAIR
+  UPGRADE
+  CONSULTATION
+  MONITORING_SETUP
+  OTHER
+}
+
+enum PropertyType {
+  RESIDENTIAL
+  COMMERCIAL
+  INDUSTRIAL
+  OTHER
+}
+
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+  DRAFT
+}
+
+enum ServiceCategory {
+  RESIDENTIAL
+  COMMERCIAL
+  MAINTENANCE
+  CONSULTING
+  OTHER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  CANCELLED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketCategory {
+  TECHNICAL
+  FINANCIAL
+  MAINTENANCE
+  QUESTION
+  BILLING
+  INSTALLATION
+  PERFORMANCE
+  OTHER
+}
+
+enum CrmUserStatus {
+  LEAD
+  CONTACTED
+  QUALIFIED
+  PROPOSAL_SENT
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+  ON_HOLD
+}
+
+enum ProductService {
+  SOLAR_PANELS
+  SOLAR_WATER_HEATER
+  BATTERY_STORAGE
+  EV_CHARGING
+  ENERGY_AUDIT
+  MAINTENANCE
+  CONSULTING
+}
+
+enum JourneyStepType {
+  INITIAL_CONTACT
+  SITE_VISIT_SCHEDULED
+  SITE_VISIT_COMPLETED
+  PROPOSAL_CREATED
+  PROPOSAL_SENT
+  CONTRACT_SIGNED
+  INSTALLATION_SCHEDULED
+  INSTALLATION_COMPLETED
+  SYSTEM_ACTIVATED
+  FOLLOW_UP_SCHEDULED
+}
+
+enum StepStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  FAILED
+}
+
+enum CustomerType {
+  RESIDENTIAL
+  COMMERCIAL
+  FARM
+}
+
+enum LeadCustomerType {
+  OWNER
+  LEASE
+  UNKNOWN
+}
+
+enum EquipmentStatus {
+  ONLINE
+  WARNING
+  OFFLINE
+  MAINTENANCE
+}
+
+enum AlertLevel {
+  NORMAL
+  WARNING
+  CRITICAL
+}
