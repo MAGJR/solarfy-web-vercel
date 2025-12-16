@@ -11,12 +11,12 @@ export const auth = betterAuth({
     provider: "postgresql",
   }),
   plugins: [
-    stripe({
+    ...(process.env.STRIPE_SECRET_KEY && stripeClient ? [stripe({
       stripeClient,
-      stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET as string,
+      stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
       createCustomerOnSignUp: true,
       allowDangerousWebhookTesting: process.env.NODE_ENV === "development",
-    })
+    })] : [])
   ],
   emailAndPassword: {
     enabled: true,

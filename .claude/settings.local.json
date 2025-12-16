@@ -4,7 +4,8 @@
       "Bash(npm view:*)",
       "Bash(npm cache clean:*)",
       "Bash(npm install:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(npx prisma generate:*)"
     ],
     "deny": [],
     "ask": []
